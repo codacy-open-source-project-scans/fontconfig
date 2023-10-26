@@ -93,7 +93,7 @@ static const FcFtEncoding   fcFtEncoding[] = {
  {  TT_PLATFORM_MICROSOFT,	TT_MS_ID_SYMBOL_CS,	"UTF-16BE" },
  {  TT_PLATFORM_MICROSOFT,	TT_MS_ID_UNICODE_CS,	"UTF-16BE" },
  {  TT_PLATFORM_MICROSOFT,	TT_MS_ID_SJIS,		"SJIS-WIN" },
- {  TT_PLATFORM_MICROSOFT,	TT_MS_ID_GB2312,	"GB2312" },
+ {  TT_PLATFORM_MICROSOFT,	TT_MS_ID_PRC,		"GB18030" },
  {  TT_PLATFORM_MICROSOFT,	TT_MS_ID_BIG_5,		"BIG-5" },
  {  TT_PLATFORM_MICROSOFT,	TT_MS_ID_WANSUNG,	"Wansung" },
  {  TT_PLATFORM_MICROSOFT,	TT_MS_ID_JOHAB,		"Johab" },
@@ -699,6 +699,7 @@ FcSfntNameTranscode (FT_SfntName *sname)
     iconv_t cd;
 #endif
     FcChar8 *utf8;
+    FcBool redecoded = FcFalse;
 
     for (i = 0; i < NUM_FC_FT_ENCODING; i++)
 	if (fcFtEncoding[i].platform_id == sname->platform_id &&
@@ -709,6 +710,7 @@ FcSfntNameTranscode (FT_SfntName *sname)
 	return 0;
     fromcode = fcFtEncoding[i].fromcode;
 
+retry:
     /*
      * Many names encoded for TT_PLATFORM_MACINTOSH are broken
      * in various ways. Kludge around them.
@@ -717,6 +719,10 @@ FcSfntNameTranscode (FT_SfntName *sname)
     {
 	if (sname->language_id == TT_MAC_LANGID_ENGLISH &&
 	    FcLooksLikeSJIS (sname->string, sname->string_len))
+	{
+	    fromcode = "SJIS";
+	}
+	else if (sname->language_id == TT_MAC_LANGID_JAPANESE)
 	{
 	    fromcode = "SJIS";
 	}
@@ -858,12 +864,27 @@ FcSfntNameTranscode (FT_SfntName *sname)
 	    {
 		iconv_close (cd);
 		free (utf8);
+		if (!redecoded)
+		{
+		    /* Regard the encoding as UTF-16BE and try again. */
+		    redecoded = FcTrue;
+		    fromcode = "UTF-16BE";
+		    goto retry;
+		}
 		return 0;
 	    }
 	}
     	iconv_close (cd);
 	*outbuf = '\0';
 	goto done;
+    }
+#else
+    if (!redecoded)
+    {
+	/* Regard the encoding as UTF-16BE and try again. */
+	redecoded = FcTrue;
+	fromcode = "UTF-16BE";
+	goto retry;
     }
 #endif
     return 0;
